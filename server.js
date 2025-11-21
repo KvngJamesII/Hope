@@ -123,41 +123,71 @@ async function fetchOTPs(req, res) {
   }
 }
 
-// Test API connection endpoint
+// Test API connection endpoint - Try multiple methods
 app.get('/api/test', async (req, res) => {
-  console.log('🧪 Testing API connection...');
+  console.log('🧪 Testing API connection with multiple methods...');
+  const results = [];
+  
+  // Method 1: GET with query params
   try {
-    // Try basic request with just token
-    const testUrl = `${API_URL}?token=${API_TOKEN}`;
-    console.log('🔗 Test URL:', testUrl);
-    
-    const response = await axios.get(testUrl, {
+    console.log('Method 1: GET with query params');
+    const response = await axios.get(`${API_URL}?token=${API_TOKEN}&records=1`, {
       timeout: 5000
     });
-    
-    console.log('✅ Test successful:', response.status);
-    console.log('📊 Test response:', JSON.stringify(response.data, null, 2));
-    
-    res.json({
-      success: true,
-      message: 'API connection successful',
-      status: response.status,
-      data: response.data,
-      timestamp: new Date().toISOString()
-    });
+    results.push({ method: 'GET-query', success: true, data: response.data });
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-    }
-    res.status(500).json({
-      success: false,
-      message: 'API connection failed',
-      error: error.message,
-      responseData: error.response?.data,
-      timestamp: new Date().toISOString()
-    });
+    results.push({ method: 'GET-query', success: false, error: error.response?.data || error.message });
   }
+  
+  // Method 2: POST with form data
+  try {
+    console.log('Method 2: POST with form data');
+    const response = await axios.post(API_URL, 
+      new URLSearchParams({ token: API_TOKEN, records: '1' }).toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 5000
+      }
+    );
+    results.push({ method: 'POST-form', success: true, data: response.data });
+  } catch (error) {
+    results.push({ method: 'POST-form', success: false, error: error.response?.data || error.message });
+  }
+  
+  // Method 3: POST with JSON
+  try {
+    console.log('Method 3: POST with JSON');
+    const response = await axios.post(API_URL, 
+      { token: API_TOKEN, records: 1 },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 5000
+      }
+    );
+    results.push({ method: 'POST-json', success: true, data: response.data });
+  } catch (error) {
+    results.push({ method: 'POST-json', success: false, error: error.response?.data || error.message });
+  }
+  
+  // Method 4: GET with Authorization header
+  try {
+    console.log('Method 4: GET with Authorization header');
+    const response = await axios.get(`${API_URL}?records=1`, {
+      headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+      timeout: 5000
+    });
+    results.push({ method: 'GET-bearer', success: true, data: response.data });
+  } catch (error) {
+    results.push({ method: 'GET-bearer', success: false, error: error.response?.data || error.message });
+  }
+  
+  console.log('📊 Test results:', JSON.stringify(results, null, 2));
+  
+  res.json({
+    message: 'Tested multiple authentication methods',
+    results: results,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start server

@@ -8,7 +8,8 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 // Your API configuration
 const API_URL = 'http://51.77.216.195/crapi/dgroup/viewstats';
-const API_TOKEN = 'hYaAhYSOjTxCTlI=';
+// IMPORTANT: Replace this with your ACTUAL token from the panel
+const API_TOKEN = 'hYaAhYSOjTxCTlI='; // Update this with correct token
 
 // Middleware - More permissive CORS
 app.use(cors({
@@ -33,12 +34,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// Get OTPs endpoint
+// Get OTPs endpoint - Support both GET and POST
 app.get('/api/otps', async (req, res) => {
-  try {
-    const { dt1, dt2, records, filternum, filtercli } = req.query;
+  await fetchOTPs(req, res);
+});
 
-    // Build query parameters
+app.post('/api/otps', async (req, res) => {
+  await fetchOTPs(req, res);
+});
+
+async function fetchOTPs(req, res) {
+  try {
+    const { dt1, dt2, records, filternum, filtercli } = req.method === 'GET' ? req.query : req.body;
+
+    // Build parameters
     const params = {
       token: API_TOKEN,
       records: records || '50'
@@ -50,28 +59,45 @@ app.get('/api/otps', async (req, res) => {
     if (filtercli) params.filtercli = filtercli;
 
     console.log('📡 Fetching OTPs with params:', params);
+    console.log('🔗 API URL:', API_URL);
+    console.log('🔑 Token:', API_TOKEN);
 
-    // Make request to the panel API
-    const response = await axios.get(API_URL, { 
-      params,
-      timeout: 10000 // 10 second timeout
+    // Try POST method first (as docs say it supports POST)
+    const response = await axios({
+      method: 'post',
+      url: API_URL,
+      data: new URLSearchParams(params).toString(),
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      }
     });
 
     console.log('✅ API Response Status:', response.status);
-    console.log('📊 Data received:', Array.isArray(response.data) ? response.data.length + ' records' : 'Object response');
+    console.log('📊 Full response data:', JSON.stringify(response.data, null, 2));
+    
+    // Check if response indicates an error
+    if (response.data && response.data.status === 'error') {
+      throw new Error(response.data.msg || 'API returned error status');
+    }
+
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      console.log('📊 First record sample:', JSON.stringify(response.data[0], null, 2));
+    }
 
     res.json({
       success: true,
       data: response.data,
-      count: Array.isArray(response.data) ? response.data.length : 0
+      count: Array.isArray(response.data) ? response.data.length : 0,
+      dataType: typeof response.data,
+      isArray: Array.isArray(response.data)
     });
 
   } catch (error) {
     console.error('❌ Error fetching OTPs:', error.message);
     
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
       console.error('Response error:', error.response.status, error.response.data);
       res.status(error.response.status).json({
         success: false,
@@ -80,7 +106,6 @@ app.get('/api/otps', async (req, res) => {
         status: error.response.status
       });
     } else if (error.request) {
-      // The request was made but no response was received
       console.error('No response received from API');
       res.status(503).json({
         success: false,
@@ -88,7 +113,6 @@ app.get('/api/otps', async (req, res) => {
         message: 'Could not reach the OTP panel API'
       });
     } else {
-      // Something happened in setting up the request
       console.error('Request setup error:', error.message);
       res.status(500).json({
         success: false,
@@ -97,30 +121,40 @@ app.get('/api/otps', async (req, res) => {
       });
     }
   }
-});
+}
 
 // Test API connection endpoint
 app.get('/api/test', async (req, res) => {
   console.log('🧪 Testing API connection...');
   try {
-    const response = await axios.get(API_URL, {
-      params: { token: API_TOKEN, records: '1' },
+    // Try basic request with just token
+    const testUrl = `${API_URL}?token=${API_TOKEN}`;
+    console.log('🔗 Test URL:', testUrl);
+    
+    const response = await axios.get(testUrl, {
       timeout: 5000
     });
     
     console.log('✅ Test successful:', response.status);
+    console.log('📊 Test response:', JSON.stringify(response.data, null, 2));
+    
     res.json({
       success: true,
       message: 'API connection successful',
       status: response.status,
+      data: response.data,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('❌ Test failed:', error.message);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+    }
     res.status(500).json({
       success: false,
       message: 'API connection failed',
       error: error.message,
+      responseData: error.response?.data,
       timestamp: new Date().toISOString()
     });
   }
